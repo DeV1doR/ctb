@@ -19,6 +19,11 @@ type CoinmarketDict struct {
 	Price    string `json:"price_usd"`
 }
 
+type CMD struct {
+	Name        string
+	Description string
+}
+
 var (
 	// seconds
 	sendUpdateEvery    = 500
@@ -39,6 +44,12 @@ var (
 	httpClient   = &http.Client{Timeout: 10 * time.Second}
 	botToken     = flag.String("token", "", "telegram bot token")
 	currentUsers = make(map[int64]bool)
+	commands     = []*CMD{
+		&CMD{Name: "subscribe", Description: "Subscribe to price notification"},
+		&CMD{Name: "unsubscribe", Description: "Unsubscribe from price notification"},
+		&CMD{Name: "updatemarket", Description: "Update market prices"},
+		&CMD{Name: "showprices", Description: "Show current prices"},
+	}
 )
 
 func getJson(url string, target interface{}) error {
@@ -76,6 +87,39 @@ func updateCoimarketInfo() error {
 	return nil
 }
 
+func notifyUsers(bot *tgbotapi.BotAPI) {
+	if err := updateCoimarketInfo(); err != nil {
+		log.Printf("Coinmarket update error: %s \n", err)
+	}
+	for UID := range currentUsers {
+		var buffer bytes.Buffer
+		var keys []string
+		for k := range coinmarketLastData {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, currency := range keys {
+			data := coinmarketLastData[currency]
+			last, current := data["last"], data["current"]
+			text := fmt.Sprintf("Currency: %s \nPrice: %.2f \nDiff: %.2f\n\n", currency, current, current-last)
+			buffer.WriteString(text)
+		}
+		msg := tgbotapi.NewMessage(UID, buffer.String())
+		bot.Send(msg)
+	}
+}
+
+func showHelp(bot *tgbotapi.BotAPI, UID int64) {
+	var buffer bytes.Buffer
+	buffer.WriteString("Bot commands (/help):\n\n")
+	for _, cmd := range commands {
+		text := fmt.Sprintf("/%s - %s\n", cmd.Name, cmd.Description)
+		buffer.WriteString(text)
+	}
+	msg := tgbotapi.NewMessage(UID, buffer.String())
+	bot.Send(msg)
+}
+
 func main() {
 	flag.Parse()
 
@@ -100,28 +144,9 @@ func main() {
 
 	go func() {
 		for {
-			if err := updateCoimarketInfo(); err != nil {
-				log.Printf("Coinmarket update error: %s \n", err)
-			}
-
 			select {
 			case <-ticker.C:
-				for UID := range currentUsers {
-					var buffer bytes.Buffer
-					var keys []string
-					for k := range coinmarketLastData {
-						keys = append(keys, k)
-					}
-					sort.Strings(keys)
-					for _, currency := range keys {
-						data := coinmarketLastData[currency]
-						last, current := data["last"], data["current"]
-						text := fmt.Sprintf("Currency: %s \nPrice: %.2f \nDiff: %.2f\n\n", currency, current, current-last)
-						buffer.WriteString(text)
-					}
-					msg := tgbotapi.NewMessage(UID, buffer.String())
-					bot.Send(msg)
-				}
+				notifyUsers(bot)
 			case <-doneTicker:
 				return
 			}
@@ -154,6 +179,13 @@ func main() {
 				msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Successfully unsubscribed.")
 			}
 			bot.Send(msg)
+		} else if update.Message.Command() == "updatemarket" {
+			msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Prices updated.")
+			bot.Send(msg)
+		} else if update.Message.Command() == "showprices" {
+			notifyUsers(bot)
+		} else if update.Message.Command() == "help" {
+			showHelp(bot, update.Message.Chat.ID)
 		}
 	}
 }
