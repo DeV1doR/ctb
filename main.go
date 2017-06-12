@@ -36,8 +36,9 @@ var (
 			"current": 0,
 		},
 	}
-	httpClient = &http.Client{Timeout: 10 * time.Second}
-	botToken   = flag.String("token", "", "telegram bot token")
+	httpClient   = &http.Client{Timeout: 10 * time.Second}
+	botToken     = flag.String("token", "", "telegram bot token")
+	currentUsers = make(map[int64]bool)
 )
 
 func getJson(url string, target interface{}) error {
@@ -86,14 +87,11 @@ func main() {
 	bot.Debug = true
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	// инициализируем канал, куда будут прилетать обновления от API
 	ucfg := tgbotapi.NewUpdate(0)
 	ucfg.Timeout = 60
 
 	var updates tgbotapi.UpdatesChannel
 	updates, err = bot.GetUpdatesChan(ucfg)
-
-	currentUsers := make(map[int64]bool)
 
 	log.Printf("%+v \n", coinmarketLastData)
 
@@ -157,14 +155,5 @@ func main() {
 			}
 			bot.Send(msg)
 		}
-
-		// log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
-
-		// log.Println(update.Message.Chat.ID)
-
-		// msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-		// // msg.ReplyToMessageID = update.Message.MessageID
-
-		// bot.Send(msg)
 	}
 }
