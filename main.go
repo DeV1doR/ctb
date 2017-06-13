@@ -26,7 +26,7 @@ type CMD struct {
 
 var (
 	// seconds
-	sendUpdateEvery    = 500
+	sendUpdateEvery    = 300
 	coinmarketLastData = map[string]map[string]float64{
 		"BTC": map[string]float64{
 			"last":    0,
@@ -101,11 +101,21 @@ func notifyUsers(bot *tgbotapi.BotAPI) {
 		for _, currency := range keys {
 			data := coinmarketLastData[currency]
 			last, current := data["last"], data["current"]
-			text := fmt.Sprintf("Currency: %s \nPrice: %.2f \nDiff: %.2f\n\n", currency, current, current-last)
-			buffer.WriteString(text)
+
+			diff := current - last
+
+			buffer.WriteString(fmt.Sprintf("<b>Currency:</b> %s \n", currency))
+			buffer.WriteString(fmt.Sprintf("<b>Price:</b> <b>$</b>%.2f \n", current))
+			if int(diff) != 0 {
+				buffer.WriteString(fmt.Sprintf("<b>Diff:</b> <b>$</b>%.2f\n", diff))
+			}
+			buffer.WriteString("\n")
 		}
 		msg := tgbotapi.NewMessage(UID, buffer.String())
-		bot.Send(msg)
+		msg.ParseMode = tgbotapi.ModeHTML
+		if _, err := bot.Send(msg); err != nil {
+			fmt.Printf("Bot send error: %s\n", err)
+		}
 	}
 }
 
@@ -184,7 +194,7 @@ func main() {
 			bot.Send(msg)
 		} else if update.Message.Command() == "showprices" {
 			notifyUsers(bot)
-		} else if update.Message.Command() == "help" {
+		} else if update.Message.Command() == "help" || update.Message.Command() == "start" {
 			showHelp(bot, update.Message.Chat.ID)
 		}
 	}
